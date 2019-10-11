@@ -4868,4 +4868,28 @@ describe('Parse.Query testing', () => {
     const results = await query.find();
     equal(results[0].get('array').length, 105);
   });
+
+  it('can sort on pointer number fields', async () => {
+    console.log('start');
+    const item1 = new TestObject({ number: 1 });
+    const item2 = new TestObject({ number: 2 });
+    const container1 = new Container({ item: item1 });
+    const container2 = new Container({ item: item2 });
+
+    await Parse.Object.saveAll([item1, item2, container1, container2]);
+
+    let query = new Parse.Query(Container);
+    query.include('item').ascending('item.number');
+
+    let results = await query.find();
+    equal(results[0].get('item').get('number'), 1);
+    equal(results[1].get('item').get('number'), 2);
+
+    query = new Parse.Query(Container);
+    query.include('item').descending('item.number');
+
+    results = await query.find();
+    equal(results[0].get('item').get('number'), 2);
+    equal(results[1].get('item').get('number'), 1);
+  });
 });

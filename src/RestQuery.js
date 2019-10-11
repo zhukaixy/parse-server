@@ -68,6 +68,7 @@ function RestQuery(
   // For example, passing an arg of include=foo.bar,foo.baz could lead to
   // this.include = [['foo'], ['foo', 'baz'], ['foo', 'bar']]
   this.include = [];
+  this.includeCopy = [];
 
   // If we have keys, we probably want to force some includes (n-1 level)
   // See issue: https://github.com/parse-community/parse-server/issues/3185
@@ -203,6 +204,9 @@ RestQuery.prototype.execute = function(executeOptions) {
     })
     .then(() => {
       return this.handleInclude();
+    })
+    .then(() => {
+      return this.handlePointerSort();
     })
     .then(() => {
       return this.runAfterFindTrigger();
@@ -747,6 +751,7 @@ RestQuery.prototype.handleInclude = function() {
   if (this.include.length == 0) {
     return;
   }
+  this.includeCopy = [...this.include];
 
   var pathResponse = includePath(
     this.config,
@@ -767,6 +772,36 @@ RestQuery.prototype.handleInclude = function() {
   }
 
   return pathResponse;
+};
+
+RestQuery.prototype.handlePointerSort = function() {
+  if (this.includeCopy.length === 0 || !this.findOptions.sort) {
+    return;
+  }
+
+  const handleSort = (a, b, keys) => {
+    const key = keys[0];
+    const isDescending = this.findOptions.sort[key] === -1;
+    const value1 = key.split('.').reduce((acc, cur) => acc[cur], a);
+    const value2 = key.split('.').reduce((acc, cur) => acc[cur], b);
+
+    if (value1 < value2) {
+      return isDescending ? 1 : -1;
+    }
+    if (value1 > value2) {
+      return isDescending ? -1 : 1;
+    }
+    if (keys.length > 1) {
+      const remainingKeys = keys.slice(1);
+      return handleSort(a, b, remainingKeys);
+    }
+    return 0;
+  };
+
+  const keys = Object.keys(this.findOptions.sort);
+  this.response.results.sort((a, b) => {
+    return handleSort(a, b, keys);
+  });
 };
 
 //Returns a promise of a processed set of results
