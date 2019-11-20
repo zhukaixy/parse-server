@@ -194,7 +194,7 @@ describe('schemas', () => {
     });
   });
 
-  it('creates _User schema when server starts', done => {
+  fit('creates _User schema when server starts', done => {
     request({
       url: 'http://localhost:8378/1/schemas',
       json: true,

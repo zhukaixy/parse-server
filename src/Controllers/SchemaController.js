@@ -19,6 +19,8 @@ const Parse = require('parse/node').Parse;
 import { StorageAdapter } from '../Adapters/Storage/StorageAdapter';
 import DatabaseController from './DatabaseController';
 import Config from '../Config';
+import { ParsePubSub } from '../LiveQuery/ParsePubSub';
+import { randomString } from '../cryptoUtils';
 // @flow-disable-next
 import deepcopy from 'deepcopy';
 import type {
@@ -560,15 +562,36 @@ export default class SchemaController {
   protectedFields: any;
 
   constructor(databaseAdapter: StorageAdapter, schemaCache: any) {
+    const config = Config.get(Parse.applicationId);
     this._dbAdapter = databaseAdapter;
     this._cache = schemaCache;
     this.schemaData = new SchemaData();
-    this.protectedFields = Config.get(Parse.applicationId).protectedFields;
+    this.protectedFields = config.protectedFields;
+    this.publisherId = randomString(20);
+    this.schemaPublisher = ParsePubSub.createPublisher(config);
+    this.schemaSubscriber = ParsePubSub.createSubscriber(config);
+    this.schemaSubscriber.subscribe(Parse.applicationId + '_Schema');
+    console.log('lead schema');
+    this.schemaSubscriber.on('message', async (channel, pid) => {
+      if (
+        channel !== Parse.applicationId + '_Schema' ||
+        this.publisherId === pid
+      ) {
+        return;
+      }
+      await this.reloadData({ clearCache: true });
+    });
   }
 
   reloadData(options: LoadSchemaOptions = { clearCache: false }): Promise<any> {
     if (this.reloadDataPromise && !options.clearCache) {
       return this.reloadDataPromise;
+    }
+    if (options.clearCache) {
+      this.schemaPublisher.publish(
+        Parse.applicationId + '_Schema',
+        this.publisherId
+      );
     }
     this.reloadDataPromise = this.getAllClasses(options)
       .then(
@@ -592,12 +615,11 @@ export default class SchemaController {
     if (options.clearCache) {
       return this.setAllClasses();
     }
-    return this._cache.getAllClasses().then(allClasses => {
-      if (allClasses && allClasses.length) {
-        return Promise.resolve(allClasses);
-      }
-      return this.setAllClasses();
-    });
+    const allClasses = this._cache.getSchemaData();
+    if (allClasses && allClasses.length) {
+      return Promise.resolve(allClasses);
+    }
+    return this.setAllClasses();
   }
 
   setAllClasses(): Promise<Array<Schema>> {
@@ -605,13 +627,7 @@ export default class SchemaController {
       .getAllClasses()
       .then(allSchemas => allSchemas.map(injectDefaultSchema))
       .then(allSchemas => {
-        /* eslint-disable no-console */
-        this._cache
-          .setAllClasses(allSchemas)
-          .catch(error =>
-            console.error('Error saving schema to cache:', error)
-          );
-        /* eslint-enable no-console */
+        this._cache.setSchemaData(allSchemas);
         return allSchemas;
       });
   }

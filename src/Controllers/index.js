@@ -157,16 +157,13 @@ export function getLiveQueryController(
 }
 
 export function getDatabaseController(
-  options: ParseServerOptions,
-  cacheController: CacheController
+  options: ParseServerOptions
 ): DatabaseController {
   const {
     databaseURI,
     databaseOptions,
     skipMongoDBServer13732Workaround,
     collectionPrefix,
-    schemaCacheTTL,
-    enableSingleSchemaCache,
   } = options;
   let { databaseAdapter } = options;
   if (
@@ -187,7 +184,7 @@ export function getDatabaseController(
   }
   return new DatabaseController(
     databaseAdapter,
-    new SchemaCache(cacheController, schemaCacheTTL, enableSingleSchemaCache),
+    new SchemaCache(),
     skipMongoDBServer13732Workaround
   );
 }
